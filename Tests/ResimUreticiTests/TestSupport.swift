@@ -1,5 +1,4 @@
 import CoreGraphics
-import Vapor
 @testable import resimuretici
 
 enum TestImages {
@@ -14,10 +13,4 @@ enum TestImages {
         context.fill(CGRect(x: 0, y: 0, width: size, height: size))
         return context.makeImage()!
     }
-}
-
-/// Vapor Response gövdesini Data olarak alır (ByteBuffer sarmalamaları arasında taşınabilir).
-func bodyData(_ response: Response) -> Data {
-    if let data = response.body.data { return data }
-    return Data((response.body.string ?? "").utf8)
 }
