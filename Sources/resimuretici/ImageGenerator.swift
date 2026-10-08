@@ -22,7 +22,7 @@ final class CoreMLImageGenerator: ImageGenerating, @unchecked Sendable {
         "TextEncoder.mlmodelc",
         "VAEDecoder.mlmodelc",
         "vocab.json",
-        "merges.text",
+        "merges.txt",
     ]
 
     private let pipeline: StableDiffusionPipeline
