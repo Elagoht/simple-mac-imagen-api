@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Package
+        run: |
+          mkdir -p dist/simple-mac-imagen-api
+          cp .build/release/resimuretici dist/simple-mac-imagen-api/
+          cp Scripts/fetch-model.sh dist/simple-mac-imagen-api/
+          cp README.md dist/simple-mac-imagen-api/
+          cd dist
+          zip -r ../simple-mac-imagen-api-macos-arm64.zip simple-mac-imagen-api
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            simple-mac-imagen-api-macos-arm64.zip \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

@@ -1,45 +1,93 @@
-# ResimUretici
+# simple-mac-imagen-api
 
-Metinden resim üreten lokal HTTP API'si. Apple'ın ml-stable-diffusion kütüphanesi
-(Core ML) ile Mac'te tamamen lokal çalışır — ücretsiz, bulut yok, API anahtarı yok.
+A free, fully **local** text-to-image HTTP API for Apple Silicon Macs.
+Send text → get PNG bytes back. No cloud, no API keys, no accounts.
 
-## Kurulum ve çalıştırma
+Powered by Apple's [`ml-stable-diffusion`](https://github.com/apple/ml-stable-diffusion)
+(Core ML, GPU) — and Apple's on-device Foundation Models for Turkish→English prompt
+translation and long-prompt condensation.
 
-```bash
-Scripts/fetch-model.sh        # ~870 MB, bir kez (ücretsiz, hesap gerekmez)
-swift build -c release
-.build/release/resimuretici   # varsayılan: http://127.0.0.1:8787
-```
+> The server binary is named `resimuretici` — Turkish for "image generator".
 
-Seçenekler: `--port`, `--host`, `--model` (veya `RESIM_PORT`, `RESIM_HOST`, `RESIM_MODEL_DIR`).
+## System requirements
 
-Model kaynakları eksikse sunucu açılmaz ve neyin eksik olduğunu yazar.
+| | |
+|---|---|
+| Hardware | Apple Silicon Mac (M1 or newer) |
+| OS | **macOS 26 or later** |
+| RAM | 8 GB works with SD 1.5 · **16 GB recommended** (SDXL) |
+| Disk | ~0.9 GB (SD 1.5) / ~3 GB (SDXL) for the model |
+| Apple Intelligence | **Optional** — powers Turkish→English translation and long-prompt condensation. Without it the server still runs; prompts are used as-is (SD models are English-trained, so quality is best with English or with Apple Intelligence on). |
+
+## Install (from Releases — no build needed)
+
+1. Download **`simple-mac-imagen-api-macos-arm64.zip`** from the
+   [Releases](../../releases) page.
+2. Unzip, then remove the Gatekeeper quarantine from the binary:
+
+   ```bash
+   cd simple-mac-imagen-api
+   xattr -d com.apple.quarantine resimuretici
+   ```
+
+3. Download a model (once; free, no account needed):
+
+   ```bash
+   chmod +x fetch-model.sh
+   ./fetch-model.sh          # SD 1.5 — fast (~870 MB)
+   ./fetch-model.sh --sdxl   # SDXL — quality (~2.9 GB)
+   ```
+
+4. Run:
+
+   ```bash
+   ./resimuretici            # serves http://127.0.0.1:8787
+   # or the quality model:
+   ./resimuretici --model Models/coreml-sdxl-base
+   ```
+
+You can keep both models side by side and switch with `--model`.
+You can also copy a `Models/` folder from another machine instead of downloading.
+
+## Models
+
+| Model | Resolution | Speed (25 steps, M4) | Download |
+|---|---|---|---|
+| SD 1.5 (6-bit) | 512×512 | ~20 s/image | `./fetch-model.sh` |
+| SDXL Base (6-bit) | 768×768 | ~80 s/image | `./fetch-model.sh --sdxl` |
+
+Model type is detected automatically (`--model` just points at a folder).
+Both are downloaded from Apple's repos on
+[Hugging Face](https://huggingface.co/apple) and remain subject to their licenses.
 
 ## API
 
-`POST /generate` — JSON gövde:
+### `POST /generate`
 
-| Alan | Tip | Varsayılan | Kural |
+JSON body:
+
+| Field | Type | Default | Rule |
 |---|---|---|---|
-| `prompt` | string | zorunlu | 1..8000 karakter |
-| `negative_prompt` | string | `""` | ≤ 8000 karakter |
-| `steps` | int | `25` | 2..50 (1, kütüphanedeki bilinen çökme nedeniyle reddedilir) |
+| `prompt` | string | required | 1..8000 chars |
+| `negative_prompt` | string | `""` | ≤ 8000 chars |
+| `steps` | int | `25` | 2..50 (`1` is rejected — known library crash) |
 | `guidance` | double | `7.5` | 1.0..15.0 |
-| `seed` | uint/null | `null` (rastgele) | `X-Seed` başlığından okunur |
-| `translate` | bool | `true` | Türkçe→İngilizce çeviriyi kapatır/açar (yoğunlaştırmayı etkilemez) |
+| `seed` | uint/null | `null` (random) | echoed in `X-Seed` |
+| `translate` | bool | `true` | Turkish→English translation on/off (does **not** disable condensation) |
 
-Başarı: `200`, `image/png` byte'ları + `X-Prompt-Used` (percent-encoded, üretime giden
-nihai İngilizce prompt), `X-Seed`, `X-Generation-Ms` başlıkları.
+Success: `200` with `image/png` bytes, plus headers:
+- `X-Prompt-Used` — the final (translated/condensed) prompt actually sent to the model, percent-encoded
+- `X-Seed` — the seed used (repeat it to reproduce an image)
+- `X-Generation-Ms` — generation time
 
-Hata: `{"error":{"code":"...","message":"..."}}` — `invalid_request` 400, `queue_full` 429,
-`generation_failed` 500, `model_not_ready` 503.
+Errors: `{"error":{"code":"...","message":"..."}}` —
+`invalid_request` 400 · `queue_full` 429 · `generation_failed` 500 · `model_not_ready` 503.
+
+One image is generated at a time; further requests queue (max 8 waiting, extras get 429).
 
 `GET /health` → `{"status":"ok|loading","model":"...","busy":false,"queue":0}`
 
-Aynı anda tek üretim yapılır; sonraki istekler FIFO sıraya girer (en fazla 8 bekleyen,
-taşan istek 429 alır).
-
-## Go örneği
+### Go example
 
 ```go
 body := strings.NewReader(`{"prompt":"kırmızı bir elma, illüstrasyon tarzında"}`)
@@ -50,9 +98,9 @@ if err != nil {
 defer resp.Body.Close()
 if resp.StatusCode != http.StatusOK {
     b, _ := io.ReadAll(resp.Body)
-    log.Fatalf("hata %d: %s", resp.StatusCode, b)
+    log.Fatalf("error %d: %s", resp.StatusCode, b)
 }
-f, err := os.Create("resim.png")
+f, err := os.Create("image.png")
 if err != nil {
     log.Fatal(err)
 }
@@ -60,39 +108,31 @@ defer f.Close()
 io.Copy(f, resp.Body)
 ```
 
-## Notlar
+## Notes
 
-- **Uzun promptlar:** SD 1.5'in metin kodlayıcısı 77 token (~250-350 karakter) alır; üzeri
-  kütüphanede sessizce kesilir. Bu yüzden 77 tokenı aşan prompt/negative_prompt, Apple'ın
-  cihaz-içi modeliyle (FoundationModels) **otomatik yoğunlaştırılır**: ana konular, stil ve
-  ruh korunarak kısa bir İngilizce prompt'a sıkıştırılır. Modele gerçekte giden metin her
-  zaman `X-Prompt-Used` başlığında görünür. Kısa promptlarda hiçbir işlem yapılmaz
-  (LLM'e gidilmez, gecikme yok); uzun promptlarda +1-3 sn.
-- Türkçe (ASCII olmayan) prompt'lar Apple'ın cihaz-içi modeliyle (FoundationModels)
-  İngilizce'ye çevrilir; saf ASCII prompt'lar olduğu gibi gider. Kapatmak için
-  `"translate": false` — bu bayrak yalnız çeviriyi kapatır, yoğunlaştırmayı değil
-  (kapatması uzun metni sessizce kaybettirirdi).
-- İllüstrasyon hissi için: prompt'a `flat illustration of ...` ekle, `negative_prompt`:
-  `"photo, realistic, 3d render"`.
-- Performans: 25 adım ≈ **19-20 sn** (M4, release, GPU, 512×512); model yüklenmesi
-  açılışta ~12 sn.
-- Apple Intelligence ayarları çeviri ve yoğunlaştırma için kullanılır; kapalıysa atlanır,
-  üretim devam eder (bu durumda 77 token üstü metin kütüphanence kesilir).
-- Model: `apple/coreml-stable-diffusion-v1-5-palettized` (6-bit, 512×512, ~20 sn/görsel).
-- **Daha kaliteli görseller için SDXL (1024×1024):**
+- **Long prompts:** the SD text encoder only reads the first 77 tokens (~250–350
+  characters); everything beyond is silently dropped by the library. Prompts exceeding
+  77 tokens are therefore **automatically condensed** on-device (key subjects, style and
+  mood preserved) — the effective prompt is always visible in `X-Prompt-Used`. Short
+  prompts pass through untouched (no LLM call, no latency).
+- **Turkish prompts** are translated to English on-device first (pure-ASCII prompts are
+  assumed English and skipped).
+- The server binds `127.0.0.1` by default (`--host` to change). There is **no
+  authentication** — if you bind beyond localhost, do it only on a trusted LAN.
+- Options: `--port`, `--host`, `--model` (env: `RESIM_PORT`, `RESIM_HOST`, `RESIM_MODEL_DIR`).
 
-  ```bash
-  Scripts/fetch-model.sh --sdxl        # ~3 GB, bir kez
-  resimuretici --model Models/coreml-sdxl-base
-  ```
+## Build from source
 
-  Kalite belirgin şekilde yükselir (kompozisyon, detay, 1024²); bedeli görsel başına
-  ~40-70 sn ve ~5-7 GB RAM. Model tipi otomatik seçilir (TextEncoder2 varlığı SDXL'e
-  işaret eder) — kod değişikliği gerekmez. Her iki modelin klasörü yan yana durabilir,
-  `--model` ile geçiş yaparsın.
-
-## Testler
+Requires macOS 26+ with Xcode 26 (or Command Line Tools from the macOS 26+ SDK):
 
 ```bash
-swift test    # birim testler + gerçek modelle smoke testi (model yoksa smoke atlanır)
+git clone <this repo>
+cd simple-mac-imagen-api
+swift build -c release
+Scripts/fetch-model.sh
+.build/release/resimuretici
 ```
+
+Note: running the **test suite** (`swift test`) currently expects Apple's Command Line
+Tools layout (`Package.swift` carries a CLT-specific linker path for the test target);
+the release binary itself has no such dependency.
