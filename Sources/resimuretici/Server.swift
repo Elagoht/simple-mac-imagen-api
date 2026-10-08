@@ -20,7 +20,7 @@ final class ReadinessFlag: @unchecked Sendable {
 
 struct AppState: Sendable {
     let queue: GenerationQueue
-    let translator: any PromptTranslating
+    let preparer: PromptPreparer
     let modelName: String
     let readiness: ReadinessFlag
 }
@@ -83,10 +83,15 @@ func routes(_ app: Application, state: AppState) throws {
         } catch {
             return ApiResponses.error(.invalidRequest, "geçersiz istek", status: .badRequest)
         }
-        let finalPrompt = translate
-            ? await state.translator.translate(generationRequest.prompt)
-            : generationRequest.prompt
-        let effective = generationRequest.withPrompt(finalPrompt)
+        // Çeviri + token sığdırma (uzun prompt yoğunlaştırma) tek noktada.
+        let prepared = await state.preparer.prepare(
+            prompt: generationRequest.prompt,
+            negativePrompt: generationRequest.negativePrompt,
+            translate: translate
+        )
+        let effective = generationRequest
+            .withPrompt(prepared.prompt)
+            .withNegativePrompt(prepared.negativePrompt)
         let outcome: GenerationOutcome
         do {
             outcome = try await state.queue.enqueue(effective)

@@ -21,12 +21,12 @@ Model kaynakları eksikse sunucu açılmaz ve neyin eksik olduğunu yazar.
 
 | Alan | Tip | Varsayılan | Kural |
 |---|---|---|---|
-| `prompt` | string | zorunlu | 1..500 karakter |
-| `negative_prompt` | string | `""` | ≤ 500 karakter |
+| `prompt` | string | zorunlu | 1..8000 karakter |
+| `negative_prompt` | string | `""` | ≤ 8000 karakter |
 | `steps` | int | `25` | 2..50 (1, kütüphanedeki bilinen çökme nedeniyle reddedilir) |
 | `guidance` | double | `7.5` | 1.0..15.0 |
 | `seed` | uint/null | `null` (rastgele) | `X-Seed` başlığından okunur |
-| `translate` | bool | `true` | Türkçe→İngilizce çeviri |
+| `translate` | bool | `true` | Türkçe→İngilizce çeviriyi kapatır/açar (yoğunlaştırmayı etkilemez) |
 
 Başarı: `200`, `image/png` byte'ları + `X-Prompt-Used` (percent-encoded, üretime giden
 nihai İngilizce prompt), `X-Seed`, `X-Generation-Ms` başlıkları.
@@ -62,15 +62,22 @@ io.Copy(f, resp.Body)
 
 ## Notlar
 
+- **Uzun promptlar:** SD 1.5'in metin kodlayıcısı 77 token (~250-350 karakter) alır; üzeri
+  kütüphanede sessizce kesilir. Bu yüzden 77 tokenı aşan prompt/negative_prompt, Apple'ın
+  cihaz-içi modeliyle (FoundationModels) **otomatik yoğunlaştırılır**: ana konular, stil ve
+  ruh korunarak kısa bir İngilizce prompt'a sıkıştırılır. Modele gerçekte giden metin her
+  zaman `X-Prompt-Used` başlığında görünür. Kısa promptlarda hiçbir işlem yapılmaz
+  (LLM'e gidilmez, gecikme yok); uzun promptlarda +1-3 sn.
 - Türkçe (ASCII olmayan) prompt'lar Apple'ın cihaz-içi modeliyle (FoundationModels)
   İngilizce'ye çevrilir; saf ASCII prompt'lar olduğu gibi gider. Kapatmak için
-  `"translate": false`.
+  `"translate": false` — bu bayrak yalnız çeviriyi kapatır, yoğunlaştırmayı değil
+  (kapatması uzun metni sessizce kaybettirirdi).
 - İllüstrasyon hissi için: prompt'a `flat illustration of ...` ekle, `negative_prompt`:
   `"photo, realistic, 3d render"`.
 - Performans: 25 adım ≈ **19-20 sn** (M4, release, GPU, 512×512); model yüklenmesi
   açılışta ~12 sn.
-- Apple Intelligence ayarları çeviri için kullanılır; kapalıysa çeviri atlanır, üretim
-  devam eder.
+- Apple Intelligence ayarları çeviri ve yoğunlaştırma için kullanılır; kapalıysa atlanır,
+  üretim devam eder (bu durumda 77 token üstü metin kütüphanence kesilir).
 - Model: `apple/coreml-stable-diffusion-v1-5-palettized` (6-bit, 512×512). SDXL'e geçmek
   için karşılık gelen Core ML klasörünü indirip `--model` ile göstermek yeterli.
 

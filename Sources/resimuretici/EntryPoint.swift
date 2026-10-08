@@ -1,5 +1,6 @@
 import Vapor
 import Foundation
+import FoundationModels
 
 enum Log {
     static func info(_ message: String) {
@@ -40,9 +41,26 @@ struct ResimUreticiApp {
 
         let generator = try CoreMLImageGenerator(resourcesAt: modelURL)
         let readiness = ReadinessFlag()
+
+        // Prompt hazırlık zinciri: çeviri + token sayımı + yoğunlaştırma.
+        let counter = PromptTokenCounter(modelDirectory: modelURL)
+        if counter == nil {
+            Log.warn("token sayacı yüklenemedi — uzun prompt yoğunlaştırması kapalı")
+        }
+        let condenser: (any PromptCondensing)? =
+            SystemLanguageModel.default.availability == .available ? FoundationModelsCondenser() : nil
+        if condenser == nil {
+            Log.warn("FoundationModels kullanılamıyor — uzun prompt yoğunlaştırması kapalı")
+        }
+        let preparer = PromptPreparer(
+            translator: SmartPromptTranslator(),
+            counter: counter,
+            condenser: condenser
+        )
+
         let state = AppState(
             queue: GenerationQueue(generator: generator),
-            translator: SmartPromptTranslator(),
+            preparer: preparer,
             modelName: modelURL.lastPathComponent,
             readiness: readiness
         )

@@ -41,7 +41,11 @@ import Vapor
 
     private func startServer(
         generator: any ImageGenerating = StubGenerator(),
-        translator: any PromptTranslating = PassthroughTranslator(),
+        preparer: PromptPreparer = PromptPreparer(
+            translator: PassthroughTranslator(),
+            counter: nil,
+            condenser: nil
+        ),
         ready: Bool = true,
         maxWaiting: Int = 8
     ) async throws -> Setup {
@@ -50,7 +54,7 @@ import Vapor
         if ready { readiness.set() }
         let state = AppState(
             queue: GenerationQueue(generator: generator, maxWaiting: maxWaiting),
-            translator: translator,
+            preparer: preparer,
             modelName: "test-model",
             readiness: readiness
         )
@@ -178,6 +182,38 @@ import Vapor
         #expect(status == 200)
         let health = try JSONDecoder().decode(HealthResponse.self, from: data)
         #expect(health.status == "loading")
+        await stop(setup)
+    }
+
+    @Test func longPromptIsCondensedThroughHttp() async throws {
+        let recorder = RecordingGenerator()
+        let preparer = PromptPreparer(
+            translator: PassthroughTranslator(),
+            counter: CharCounter(),
+            condenser: FixedCondenser(result: "a condensed apple")
+        )
+        let setup = try await startServer(generator: recorder, preparer: preparer)
+
+        let long = String(repeating: "x", count: 200)
+        let body = "{\"prompt\":\"\(long)\",\"translate\":false}"
+        let (data, status) = await post(setup.port, body)
+        #expect(status == 200)
+        #expect(Array(data.prefix(4)) == [0x89, 0x50, 0x4E, 0x47])
+
+        let last = await recorder.lastRequest
+        #expect(last?.prompt == "a condensed apple")
+        #expect(last?.negativePrompt == "")
+
+        // Başlıkta nihai prompt görünür (percent-encoded)
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(setup.port)/generate")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(body.utf8)
+        if let (_, response) = try? await URLSession.shared.data(for: request),
+           let http = response as? HTTPURLResponse {
+            let decoded = http.value(forHTTPHeaderField: "X-Prompt-Used")?.removingPercentEncoding
+            #expect(decoded == "a condensed apple")
+        }
         await stop(setup)
     }
 

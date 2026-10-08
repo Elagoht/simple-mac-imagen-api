@@ -25,9 +25,17 @@ struct GenerationRequest: Sendable, Equatable {
     static let defaultSteps = 25
     static let defaultGuidance = 7.5
 
+    static let maxPromptChars = 8000
+
     func withPrompt(_ newPrompt: String) -> GenerationRequest {
         var copy = self
         copy.prompt = newPrompt
+        return copy
+    }
+
+    func withNegativePrompt(_ newNegativePrompt: String) -> GenerationRequest {
+        var copy = self
+        copy.negativePrompt = newNegativePrompt
         return copy
     }
 }
@@ -44,8 +52,8 @@ extension RequestValidationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyPrompt: return "prompt boş olamaz"
-        case .promptTooLong(let n): return "prompt en fazla 500 karakter olabilir (şu an \(n))"
-        case .negativePromptTooLong(let n): return "negative_prompt en fazla 500 karakter olabilir (şu an \(n))"
+        case .promptTooLong(let n): return "prompt en fazla \(GenerationRequest.maxPromptChars) karakter olabilir (şu an \(n)); daha uzun metinler otomatik yoğunlaştırılır"
+        case .negativePromptTooLong(let n): return "negative_prompt en fazla \(GenerationRequest.maxPromptChars) karakter olabilir (şu an \(n))"
         case .stepsOutOfRange(let v): return "steps 2...50 aralığında olmalı (verilen: \(v))"
         case .guidanceOutOfRange(let v): return "guidance 1.0...15.0 aralığında olmalı (verilen: \(v))"
         }
@@ -56,11 +64,11 @@ extension GenerateRequestDTO {
     func validated() throws -> (request: GenerationRequest, translate: Bool) {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else { throw RequestValidationError.emptyPrompt }
-        guard trimmedPrompt.count <= 500 else {
+        guard trimmedPrompt.count <= GenerationRequest.maxPromptChars else {
             throw RequestValidationError.promptTooLong(current: trimmedPrompt.count)
         }
         let negative = negativePrompt ?? ""
-        guard negative.count <= 500 else {
+        guard negative.count <= GenerationRequest.maxPromptChars else {
             throw RequestValidationError.negativePromptTooLong(current: negative.count)
         }
         let stepCount = steps ?? GenerationRequest.defaultSteps

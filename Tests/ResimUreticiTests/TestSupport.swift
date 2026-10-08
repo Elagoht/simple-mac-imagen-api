@@ -14,3 +14,22 @@ enum TestImages {
         return context.makeImage()!
     }
 }
+
+/// Karakter sayısını token gibi sayan sahte sayaç.
+struct CharCounter: TokenCounting {
+    func count(_ text: String) -> Int { text.count }
+}
+
+struct FixedCondenser: PromptCondensing {
+    let result: String
+    func condense(_ text: String, isNegative: Bool) async -> String { result }
+}
+
+/// Son aldığı isteği kaydeden sahte üretici.
+actor RecordingGenerator: ImageGenerating {
+    private(set) var lastRequest: GenerationRequest?
+    func generate(_ request: GenerationRequest) async throws -> GeneratedImage {
+        lastRequest = request
+        return GeneratedImage(cgImage: TestImages.solid(), seedUsed: request.seed)
+    }
+}

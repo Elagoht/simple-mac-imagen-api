@@ -35,9 +35,30 @@ import Foundation
         }
     }
 
-    @Test func promptOver500CharsThrows() throws {
-        let long = String(repeating: "a", count: 501)
+    @Test func promptOf500CharsPasses() throws {
+        // 500 karakterlik eski sınır kaldırıldı: uzun prompt'lar yoğunlaştırılarak desteklenir.
+        let body = "{\"prompt\":\"\(String(repeating: "a", count: 500))\"}"
+        let dto = try JSONDecoder().decode(GenerateRequestDTO.self, from: Data(body.utf8))
+        _ = try dto.validated()
+    }
+
+    @Test func promptAt8000CharsPasses() throws {
+        let exact = String(repeating: "a", count: 8000)
+        let body = "{\"prompt\":\"\(exact)\"}"
+        let dto = try JSONDecoder().decode(GenerateRequestDTO.self, from: Data(body.utf8))
+        _ = try dto.validated()
+    }
+
+    @Test func promptOver8000CharsThrows() throws {
+        let long = String(repeating: "a", count: 8001)
         let body = "{\"prompt\":\"\(long)\"}"
+        let dto = try JSONDecoder().decode(GenerateRequestDTO.self, from: Data(body.utf8))
+        #expect(throws: RequestValidationError.self) { try dto.validated() }
+    }
+
+    @Test func negativePromptOver8000CharsThrows() throws {
+        let long = String(repeating: "a", count: 8001)
+        let body = "{\"prompt\":\"x\",\"negative_prompt\":\"\(long)\"}"
         let dto = try JSONDecoder().decode(GenerateRequestDTO.self, from: Data(body.utf8))
         #expect(throws: RequestValidationError.self) { try dto.validated() }
     }
