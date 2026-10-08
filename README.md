@@ -78,8 +78,18 @@ io.Copy(f, resp.Body)
   açılışta ~12 sn.
 - Apple Intelligence ayarları çeviri ve yoğunlaştırma için kullanılır; kapalıysa atlanır,
   üretim devam eder (bu durumda 77 token üstü metin kütüphanence kesilir).
-- Model: `apple/coreml-stable-diffusion-v1-5-palettized` (6-bit, 512×512). SDXL'e geçmek
-  için karşılık gelen Core ML klasörünü indirip `--model` ile göstermek yeterli.
+- Model: `apple/coreml-stable-diffusion-v1-5-palettized` (6-bit, 512×512, ~20 sn/görsel).
+- **Daha kaliteli görseller için SDXL (1024×1024):**
+
+  ```bash
+  Scripts/fetch-model.sh --sdxl        # ~3 GB, bir kez
+  resimuretici --model Models/coreml-sdxl-base
+  ```
+
+  Kalite belirgin şekilde yükselir (kompozisyon, detay, 1024²); bedeli görsel başına
+  ~40-70 sn ve ~5-7 GB RAM. Model tipi otomatik seçilir (TextEncoder2 varlığı SDXL'e
+  işaret eder) — kod değişikliği gerekmez. Her iki modelin klasörü yan yana durabilir,
+  `--model` ile geçiş yaparsın.
 
 ## Testler
 
