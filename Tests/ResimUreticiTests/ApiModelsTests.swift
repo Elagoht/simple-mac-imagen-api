@@ -53,11 +53,12 @@ import Foundation
         func validated(_ json: String) throws -> GenerationRequest {
             try JSONDecoder().decode(GenerateRequestDTO.self, from: Data(json.utf8)).validated().request
         }
-        #expect(try validated(#"{"prompt":"x","steps":1}"#).steps == 1)
-        #expect(try validated(#"{"prompt":"x","steps":50}"#).steps == 50)
+        // steps=1 PNDMScheduler'da process'i düşüren crash (Scheduler.swift:199) — reddedilir.
         #expect(throws: RequestValidationError.self) {
-            try JSONDecoder().decode(GenerateRequestDTO.self, from: Data(#"{"prompt":"x","steps":0}"#.utf8)).validated()
+            try JSONDecoder().decode(GenerateRequestDTO.self, from: Data(#"{"prompt":"x","steps":1}"#.utf8)).validated()
         }
+        #expect(try validated(#"{"prompt":"x","steps":2}"#).steps == 2)
+        #expect(try validated(#"{"prompt":"x","steps":50}"#).steps == 50)
         #expect(throws: RequestValidationError.self) {
             try JSONDecoder().decode(GenerateRequestDTO.self, from: Data(#"{"prompt":"x","steps":51}"#.utf8)).validated()
         }

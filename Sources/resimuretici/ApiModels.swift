@@ -46,7 +46,7 @@ extension RequestValidationError: LocalizedError {
         case .emptyPrompt: return "prompt boş olamaz"
         case .promptTooLong(let n): return "prompt en fazla 500 karakter olabilir (şu an \(n))"
         case .negativePromptTooLong(let n): return "negative_prompt en fazla 500 karakter olabilir (şu an \(n))"
-        case .stepsOutOfRange(let v): return "steps 1...50 aralığında olmalı (verilen: \(v))"
+        case .stepsOutOfRange(let v): return "steps 2...50 aralığında olmalı (verilen: \(v))"
         case .guidanceOutOfRange(let v): return "guidance 1.0...15.0 aralığında olmalı (verilen: \(v))"
         }
     }
@@ -64,7 +64,9 @@ extension GenerateRequestDTO {
             throw RequestValidationError.negativePromptTooLong(current: negative.count)
         }
         let stepCount = steps ?? GenerationRequest.defaultSteps
-        guard (1...50).contains(stepCount) else {
+        // steps=1, PNDMScheduler'da process'i düşüren crashe yol açar (Scheduler.swift:199)
+        // — Swift'te fatal error yakalanamadığı için bu değer kapıda reddedilir.
+        guard (2...50).contains(stepCount) else {
             throw RequestValidationError.stepsOutOfRange(value: stepCount)
         }
         let scale = guidance ?? GenerationRequest.defaultGuidance
