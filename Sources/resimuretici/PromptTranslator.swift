@@ -14,12 +14,17 @@ struct PassthroughTranslator: PromptTranslating {
 final class SmartPromptTranslator: PromptTranslating {
     private let inner: any PromptTranslating
 
-    init(translator: (any PromptTranslating)? = nil) {
+    init(
+        translator: (any PromptTranslating)? = nil,
+        foundationModelsFactory: @escaping () -> FoundationModelsTranslator? = { FoundationModelsTranslator.make() },
+        onFoundationModelsUnavailable: () -> Void = { Log.warn("FoundationModels kullanılamıyor, çeviri atlanıyor") }
+    ) {
         if let translator {
             inner = translator
-        } else if let fm = FoundationModelsTranslator.make() {
+        } else if let fm = foundationModelsFactory() {
             inner = fm
         } else {
+            onFoundationModelsUnavailable()
             inner = PassthroughTranslator()
         }
     }
@@ -33,23 +38,25 @@ final class SmartPromptTranslator: PromptTranslating {
 }
 
 /// Apple'ın cihaz-içi modeliyle (FoundationModels) çeviri.
-final class FoundationModelsTranslator: PromptTranslating, @unchecked Sendable {
-    private let session: LanguageModelSession
+final class FoundationModelsTranslator: PromptTranslating {
+    private static let instructions = """
+    Translate the user's text into concise, natural English suitable as an \
+    image-generation prompt. Reply with ONLY the translated text.
+    """
 
     static func make() -> FoundationModelsTranslator? {
         guard SystemLanguageModel.default.availability == .available else { return nil }
         return FoundationModelsTranslator()
     }
 
-    private init() {
-        session = LanguageModelSession(instructions: """
-        Translate the user's text into concise, natural English suitable as an \
-        image-generation prompt. Reply with ONLY the translated text.
-        """)
-    }
+    private init() {}
 
     func translate(_ prompt: String) async -> String {
         do {
+            // Oturum çağrı başına: LanguageModelSession durumlu bir sohbettir;
+            // paylaşılan oturumda transcript birikir ve eşzamanlı respond'lar
+            // birbirine karışır (final review bulgusu).
+            let session = LanguageModelSession(instructions: Self.instructions)
             let response = try await session.respond(to: prompt)
             return response.content
         } catch {

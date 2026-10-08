@@ -20,6 +20,7 @@ final class CoreMLImageGenerator: ImageGenerating, @unchecked Sendable {
 
     static let requiredResources = [
         "TextEncoder.mlmodelc",
+        "Unet.mlmodelc",
         "VAEDecoder.mlmodelc",
         "vocab.json",
         "merges.txt",
@@ -28,13 +29,20 @@ final class CoreMLImageGenerator: ImageGenerating, @unchecked Sendable {
     private let pipeline: StableDiffusionPipeline
 
     /// Gerekli kaynakların varlığını hızlıca kontrol eder (ağır yükleme loadResources'ta).
+    /// .mlmodelc kaynakları dizin olmalı — aynı adlı düz dosya eksik sayılır.
     static func validateResources(at directory: URL) throws {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: directory.path) else {
             throw ValidationError.missingResources(missing: ["<klasörün kendisi>: \(directory.path)"])
         }
-        let missing = requiredResources.filter {
-            !fileManager.fileExists(atPath: directory.appendingPathComponent($0).path)
+        let missing = requiredResources.filter { name -> Bool in
+            let path = directory.appendingPathComponent(name)
+            var isDirectory: ObjCBool = false
+            let exists = fileManager.fileExists(atPath: path.path, isDirectory: &isDirectory)
+            if name.hasSuffix(".mlmodelc") {
+                return !(exists && isDirectory.boolValue)
+            }
+            return !exists
         }
         guard missing.isEmpty else { throw ValidationError.missingResources(missing: missing) }
     }

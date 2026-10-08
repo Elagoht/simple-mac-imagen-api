@@ -29,4 +29,18 @@ import Testing
         let out = await smart.translate("kırmızı elma")
         #expect(out == "kırmızı elma")
     }
+
+    @Test func fallbackWarnsWhenFoundationModelsUnavailable() {
+        // Spec §7: FoundationModels yoksa passthrough + bir kez uyarı.
+        final class Recorder {
+            var warned = false
+        }
+        let recorder = Recorder()
+        _ = SmartPromptTranslator(
+            translator: nil,
+            foundationModelsFactory: { nil },
+            onFoundationModelsUnavailable: { recorder.warned = true }
+        )
+        #expect(recorder.warned == true)
+    }
 }

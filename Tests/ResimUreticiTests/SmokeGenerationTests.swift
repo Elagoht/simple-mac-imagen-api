@@ -7,8 +7,8 @@ import Foundation
         let modelDir = ProcessInfo.processInfo.environment["RESIM_MODEL_DIR"]
             ?? "Models/coreml-sd-v1-5-palettized"
         guard FileManager.default.fileExists(atPath: modelDir) else {
-            Issue.record("model indirilmemiş: \(modelDir) (Scripts/fetch-model.sh)")
-            return
+            // Model yoksa FAIL değil SKIP (spec §10, README sözü).
+            try Test.cancel("model indirilmemiş: \(modelDir) (Scripts/fetch-model.sh)")
         }
         let generator = try CoreMLImageGenerator(resourcesAt: URL(fileURLWithPath: modelDir))
         try generator.loadResources()
